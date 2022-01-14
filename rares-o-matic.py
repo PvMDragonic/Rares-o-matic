@@ -1,8 +1,26 @@
+from datetime import datetime
 from threading import Thread
 from lxml import html
 import requests
+import sys
 
 processed_data = []
+
+def extract_date(string):
+    string = string.replace("\n","")
+    string = string[:20] if len(string) > 22 else string
+    string = string.split(" ")
+
+    string[0] = string[0].split("-")
+    string[0][0], string[0][2] = string[0][2], string[0][0]
+    string[0][1] = {
+        "Jan" : "01", "Feb" : "02", "Mar" : "03", "Apr" : "04",
+        "May" : "05", "Jun" : "06", "Jul" : "07", "Aug" : "08",
+        "Sep" : "09", "Oct" : "10", "Nov" : "11", "Dec" : "12",
+    }.get(string[0][1])
+
+    return datetime.fromisoformat(
+        f'{string[0][0]}-{string[0][1]}-{string[0][2]} {string[1]}')
 
 def read_forum_page(lst):
     for link in lst:
@@ -17,11 +35,84 @@ def read_forum_page(lst):
             posts = [tag.text_content() for tag in page.xpath('.//span[@class="forum-post__body"]')]
             dates = [tag.text_content() for tag in page.xpath('.//div[@class="forum-post__message-container"]/p')]
 
-            for msg in posts:
+            for index, msg in enumerate(posts):
                 if not any(("hat" in msg, len(msg) < 100)):
                     continue
 
-                processed_data.append(msg)
+                words = str(msg.encode(sys.stdout.encoding, errors='replace'))
+                words = words[2:].replace(". ", " ")
+                words = words[:-1].split(" ")
+                price = ""
+                item = ""
+
+                for word in words:
+                    if any((word == "", ('/' in word and not '//' in word))):
+                        continue
+
+                    try:
+                        w = word.lower()
+                        if w[-1] == 'm':
+                            if price == "":
+                                if w[:-1].isdigit():
+                                    price = ''.join(ch for ch in w if (ch.isdigit() or ch == '.')) + 'M'
+                        elif w[-1] == 'b': 
+                            if price == "":
+                                if w[:-1].isdigit():
+                                    price = ''.join(ch for ch in w if (ch.isdigit() or ch == '.')) + 'B'
+                        elif w.isdigit():
+                            if price == "":
+                                if len(w) > 2:
+                                    if float(w) > 200:
+                                        price = w + 'M'
+                                    else:
+                                        price = w + 'B'
+                        elif ',' in w or w[0].isdigit():
+                            if price == "":
+                                try:
+                                    price = ''.join(ch for ch in w if (ch.isdigit() or ch == '.'))
+                                    if price.count(".") > 1:
+                                        price = ''.join(ch for ch in w if ch.isdigit())
+                                    if 200 < float(price) < 99999:
+                                        price = price + 'M'
+                                    elif 200 > float(price):
+                                        price = price + 'B'
+                                    else:
+                                        price = str(round(float(price) / 1000000, 1)) + 'M'
+                                except ValueError:
+                                    pass
+                        elif w == 'max':
+                            if price == "":
+                                price = '&&&'
+                        elif w == 'cash' and price == '&&&':
+                            price = '2147M'
+                        else:
+                            if item == "": 
+                                if "yellow" in w:
+                                    item = "Yellow Partyhat"
+                                elif "red" in w:
+                                    item = "Red Partyhat"
+                                elif "blue" in w:
+                                    item = "Blue Partyhat"
+                                elif "green" in w:
+                                    item = "Green Partyhat"
+                                elif "purple" in w:
+                                    item = "Purple Partyhat"
+                                elif "white" in w:
+                                    item = "White Partyhat"
+                                elif "gold" in w:
+                                    item = "Golden Partyhat"
+                                elif "gsh" in w:
+                                    item = "Green Santa Hat"
+                                elif "black" in w or "bsh" in w:
+                                    item = "Black Santa Hat"
+                                elif "santa" in w or "rsh" in w: 
+                                    item = "Red Santa Hat"
+                    except IndexError:
+                        continue
+
+                if all((item != "", price != "")):                            
+                    date = extract_date(dates[index])
+                    processed_data.append([item, price, date, msg])
 
 lyra_profile_page = html.fromstring(requests.get('https://secure.runescape.com/m=forum/users.ws?searchname=Lyra&lookup=view').content)
 forum_posts = [lyra_profile_page.xpath('.//section[@class="threads-list"]//article/a/@href')[i::3] for i in range(3)]
