@@ -1,8 +1,10 @@
 from datetime import datetime
 from threading import Thread
 from lxml import html
+import xlsxwriter
 import requests
 import sys
+import os
 
 processed_data = []
 
@@ -122,3 +124,25 @@ t2 = Thread(target = read_forum_page, args = (forum_posts[1], ))
 t3 = Thread(target = read_forum_page, args = (forum_posts[2], ))
 t1.start(); t2.start(); t3.start()
 t1.join(); t2.join(); t3.join()
+
+processed_data.sort(key = lambda x : x[2], reverse = True)
+
+for i in range(len(processed_data)):
+    processed_data[i][2] = processed_data[i][2].strftime("%m/%d/%Y %H:%M:%S")
+
+name = f'Rares {datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx'
+workbook = xlsxwriter.Workbook(os.path.expanduser(f"~/Desktop/{name}"))
+worksheet1 = workbook.add_worksheet()
+worksheet1.set_column(0, 0, 17)
+worksheet1.set_column(1, 1, 10)
+worksheet1.set_column(2, 2, 20)
+worksheet1.set_column(3, 3, 90)
+worksheet1.set_default_row(20)
+
+for i in range(len(processed_data)):
+    worksheet1.write(f'A{i+1}', processed_data[i][0])
+    worksheet1.write(f'B{i+1}', processed_data[i][1])
+    worksheet1.write(f'C{i+1}', processed_data[i][2])
+    worksheet1.write(f'D{i+1}', processed_data[i][3])
+
+workbook.close()
