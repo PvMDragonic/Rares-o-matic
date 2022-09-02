@@ -5,14 +5,38 @@ from lxml import html
 
 import xlsxwriter
 import requests
-import sys
 import os
 
 processed_data = []
 start = datetime.now()
 
+DATES = {
+    "Jan" : "01", "Feb" : "02", "Mar" : "03", "Apr" : "04",
+    "May" : "05", "Jun" : "06", "Jul" : "07", "Aug" : "08",
+    "Sep" : "09", "Oct" : "10", "Nov" : "11", "Dec" : "12",
+}
+
+TYPES = (
+    'sold', 'bought', 'nib', 'inb', 'nis', 'ins', 'buy', 'sell'
+)
+
+NAMES = (
+    'santa', 'hat', 'hween', 'h\'ween', 'ween', 'hallowe\'en', 'halloween', 'mask', 'egg', 'scythe', 
+    'hw', 'phat', 'partyhat', 'party', 'cracker', 'rsh', 'gsh', 'bsh', 'wreath', 'disk', 'pumpkin'
+)
+
+COLORS = (
+    'blue', 'white', 'red', 'purple', 'yellow', 'green', 'black', 'golden', 'gold'
+)
+
+class ItemInformation():
+    def __init__(self) -> None:
+        self.date = None
+        self.type = None
+        self.name = None
+        self.price = None
+
 def collect_data():
-    messages_analyzed = 0
     collecting = True
 
     def progress_report():
@@ -20,10 +44,9 @@ def collect_data():
         num_of_dots = 1
         while collecting:
             os.system("cls||clear")
-
             print('Collecting' + num_of_dots * '.')
             print(f'\n\nElapsed time: {str(datetime.now() - start)[:-7]}')
-            print(f'\nPrices analized: {messages_analyzed}')
+            print(f'\nPrices collected: {len(processed_data)}')
 
             if num_of_dots < 3:
                 num_of_dots += 1  
@@ -33,8 +56,6 @@ def collect_data():
             sleep(1)
 
     def read_forum_page(lst):
-        nonlocal messages_analyzed
-
         def extract_date(string):
             """Gets mm/dd/yyyy from the post date text string."""
             string = string.replace("\n","")
@@ -42,11 +63,7 @@ def collect_data():
             string = string.split(" ")
             string[0] = string[0].split("-")
             string[0][0], string[0][2] = string[0][2], string[0][0]
-            string[0][1] = {
-                "Jan" : "01", "Feb" : "02", "Mar" : "03", "Apr" : "04",
-                "May" : "05", "Jun" : "06", "Jul" : "07", "Aug" : "08",
-                "Sep" : "09", "Oct" : "10", "Nov" : "11", "Dec" : "12",
-            }.get(string[0][1])
+            string[0][1] = DATES.get(string[0][1])
 
             return datetime.fromisoformat(
                 f'{string[0][0]}-{string[0][1]}-{string[0][2]} {string[1]}')
@@ -65,86 +82,61 @@ def collect_data():
 
                 for index, msg in enumerate(posts):
                     # Filters unwanted posts.
-                    if not any(("hat" in msg, len(msg) < 100)):
+                    if any(["CURRENT RARE PRICES" in msg, len(msg) > 100]):
                         continue
 
-                    words = str(msg.encode(sys.stdout.encoding, errors='replace'))
-                    words = words[2:].replace(". ", " ")
-                    words = words[:-1].split(" ")
-                    price = ""
-                    item = ""
+                    # Most follow the structure of "[transaction type] [item] for [price]"".
+                    post = msg.split("for")
+                    if len(post) <= 1:
+                        # If it differs from the above pattern, it's just easier to skip.
+                        continue
 
-                    for word in words:
-                        if any((word == "", ('/' in word and not '//' in word))):
-                            continue
+                    item = ItemInformation()
 
-                        try:
-                            w = word.lower()
-                            if w[-1] == 'm':
-                                if price == "":
-                                    if w[:-1].isdigit():
-                                        price = ''.join(ch for ch in w if (ch.isdigit() or ch == '.')) + 'M'
-                            elif w[-1] == 'b': 
-                                if price == "":
-                                    if w[:-1].isdigit():
-                                        price = ''.join(ch for ch in w if (ch.isdigit() or ch == '.')) + 'B'
-                            elif w.isdigit():
-                                if price == "":
-                                    if len(w) > 2:
-                                        if float(w) > 200:
-                                            price = w + 'M'
-                                        else:
-                                            price = w + 'B'
-                            elif ',' in w or w[0].isdigit():
-                                if price == "":
-                                    try:
-                                        price = ''.join(ch for ch in w if (ch.isdigit() or ch == '.'))
-                                        if price.count(".") > 1:
-                                            price = ''.join(ch for ch in w if ch.isdigit())
-                                        if 200 < float(price) < 99999:
-                                            price = price + 'M'
-                                        elif 200 > float(price):
-                                            price = price + 'B'
-                                        else:
-                                            price = str(round(float(price) / 1000000, 1)) + 'M'
-                                    except ValueError:
-                                        pass
-                            elif w == 'max':
-                                if price == "":
-                                    price = '&&&'
-                            elif w == 'cash' and price == '&&&':
-                                price = '2147M'
-                            else:
-                                if item == "": 
-                                    if "yellow" in w:
-                                        item = "Yellow Partyhat"
-                                    elif "red" in w:
-                                        item = "Red Partyhat"
-                                    elif "blue" in w:
-                                        item = "Blue Partyhat"
-                                    elif "green" in w:
-                                        item = "Green Partyhat"
-                                    elif "purple" in w:
-                                        item = "Purple Partyhat"
-                                    elif "white" in w:
-                                        item = "White Partyhat"
-                                    elif "gold" in w:
-                                        item = "Golden Partyhat"
-                                    elif "gsh" in w:
-                                        item = "Green Santa Hat"
-                                    elif "black" in w or "bsh" in w:
-                                        item = "Black Santa Hat"
-                                    elif "santa" in w or "rsh" in w: 
-                                        # Some gsh will get flagged as regular santa,
-                                        # but it's just easier to fix manually, afterwards.
-                                        item = "Red Santa Hat"
-                        except IndexError:
-                            continue
+                    words = [word.lower() for word in post[0].split(" ")]
+                    for i, word in enumerate(words):
+                        try:                                
+                            if not item.type:
+                                if word in TYPES:
+                                    item.type = word
+                                    continue
 
-                    if all((item != "", price != "")):                            
-                        date = extract_date(dates[index])
-                        processed_data.append([item, price, date, msg])
-                        messages_analyzed += 1
+                            if not item.name:
+                                if word in NAMES:
+                                    item.name = word
+
+                                    if item.name in ("hat", "mask"):
+                                        second_name = words[i-1]
+                                        item.name = f"{second_name} {item.name}" # "santa hat".
+                                        third_name = words[i-2]
+                                        if third_name in COLORS:
+                                            item.name = f"{third_name} {item.name}" # "red santa hat".
+                                    elif item.name in ("party", "santa"):
+                                        second_name = words[i-1]
+                                        if second_name in COLORS:
+                                            item.name = f"{second_name} {item.name}" # "red party".
+                                        item.name = f"{item.name} hat" # "red party hat".
+                                    elif item.name in ("partyhat", "phat"):
+                                        second_name = words[i-1]
+                                        if second_name in COLORS:
+                                            item.name = f"{second_name} {item.name}" # "red partyhat".
+                                    elif item.name in ("hw", "hween", "h'ween", "ween", "halloween", "hallowe\'en"):
+                                        second_name = words[i-1]
+                                        if second_name in COLORS:
+                                            item.name = f"{second_name} {item.name}" # "red hween".
+                                        item.name = f"{item.name} mask" # "red hween mask".
+                                    elif item.name in ("egg", "scythe", "wreath"):
+                                        second_name = words[i-1]
+                                        item.name = f"{second_name} {item.name}" # "easter egg"; "christmas scythe".
+                                    elif item.name == "disk":
+                                        item.name = "disk of returning"
+                        except Exception:
+                            pass
+                           
+                    if all([item.name, item.type]):
+                        item.date = extract_date(dates[index])
+                        item.price = post[1].split("https")[0] # Some posts have an imgur link attached after the price.
+                        processed_data.append(item)
 
     lyra_profile_page = html.fromstring(requests.get('https://secure.runescape.com/m=forum/users.ws?searchname=Lyra&lookup=view').content)
     forum_posts = [lyra_profile_page.xpath('.//section[@class="threads-list"]//article/a/@href')[i::3] for i in range(3)]
@@ -155,28 +147,29 @@ def collect_data():
     t3 = Thread(target = read_forum_page, args = (forum_posts[2], ))
     t1.start(); t2.start(); t3.start()
     t1.join(); t2.join(); t3.join()
-    collecting = False
+    collecting = False # Breaks progress_report's thread.
 
 def save_data():
-    processed_data.sort(key = lambda x : x[2], reverse = True)
+    processed_data.sort(key = lambda x : x.date, reverse = True)
 
     for i in range(len(processed_data)):
-        processed_data[i][2] = processed_data[i][2].strftime("%Y-%m-%d %H:%M:%S")
+        processed_data[i].date = processed_data[i].date.strftime("%Y-%m-%d %H:%M:%S")
 
     name = f'Rares {datetime.now().strftime("%Y-%m-%d %H-%M-%S")}.xlsx'
     workbook = xlsxwriter.Workbook(os.path.expanduser(f"~/Desktop/{name}"))
     worksheet1 = workbook.add_worksheet()
-    worksheet1.set_column(0, 0, 17)
+    worksheet1.set_column(0, 0, 20)
     worksheet1.set_column(1, 1, 10)
     worksheet1.set_column(2, 2, 20)
-    worksheet1.set_column(3, 3, 90)
-    worksheet1.set_default_row(20)
+    worksheet1.set_column(3, 3, 60)
+    worksheet1.set_column(4, 4, 90)
+    worksheet1.set_default_row(30)
 
     for i in range(len(processed_data)):
-        worksheet1.write(f'A{i+1}', processed_data[i][0])
-        worksheet1.write(f'B{i+1}', processed_data[i][1])
-        worksheet1.write(f'C{i+1}', processed_data[i][2])
-        worksheet1.write(f'D{i+1}', processed_data[i][3])
+        worksheet1.write(f'A{i+1}', processed_data[i].date)
+        worksheet1.write(f'B{i+1}', processed_data[i].type)
+        worksheet1.write(f'C{i+1}', processed_data[i].name)
+        worksheet1.write(f'D{i+1}', processed_data[i].price)
 
     workbook.close()
     os.system("cls||clear")
